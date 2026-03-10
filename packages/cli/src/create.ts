@@ -238,69 +238,107 @@ async function createFromPreset(
   return { folderName, displayName, gender: preset.gender, hasPortrait, falKey }
 }
 
+// ── SCULPTING HELPERS ──────────────────────────────────────────────────────
+
+/**
+ * List picker that always includes a "✏️ Type your own..." escape hatch.
+ */
+async function selectOrType(
+  message: string,
+  choices: string[],
+  defaultValue?: string
+): Promise<string> {
+  const CUSTOM = '__custom__'
+  const { value } = await inquirer.prompt([{
+    type: 'list',
+    name: 'value',
+    message,
+    choices: [
+      ...choices.map(c => ({ name: c, value: c.toLowerCase() })),
+      new (inquirer as any).Separator(),
+      { name: '✏️  Type your own...', value: CUSTOM },
+    ],
+    default: defaultValue ?? choices[0].toLowerCase(),
+  }])
+
+  if (value !== CUSTOM) return value
+
+  const label = message.replace(':', '').toLowerCase()
+  const { custom } = await inquirer.prompt([{
+    type: 'input',
+    name: 'custom',
+    message: `Enter custom ${label}:`,
+    validate: (v: string) => v.trim().length > 0 ? true : 'Required',
+  }])
+  return custom.trim()
+}
+
+/**
+ * Checkbox picker + optional free-text additions.
+ */
+async function checkboxPlusCustom(
+  message: string,
+  choices: string[],
+  defaultChecked: string[],
+  max: number
+): Promise<string[]> {
+  const { selected } = await inquirer.prompt([{
+    type: 'checkbox',
+    name: 'selected',
+    message: `${message} (pick up to ${max}):`,
+    choices: choices.map(c => ({
+      name: c,
+      value: c,
+      checked: defaultChecked.some(d =>
+        c.toLowerCase().split(' — ')[0].includes(d.toLowerCase().split(' ')[0])
+      ),
+    })),
+    validate: (v: string[]) =>
+      v.length <= max ? true : `Pick at most ${max}`,
+  }])
+
+  // Allow free-form custom additions (up to remaining slots)
+  const remaining = max - selected.length
+  if (remaining > 0) {
+    const { customInput } = await inquirer.prompt([{
+      type: 'input',
+      name: 'customInput',
+      message: chalk.gray(`Add custom options (comma-separated, max ${remaining} more — press Enter to skip):`),
+    }])
+    if (customInput.trim()) {
+      const extras = customInput.split(',')
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+        .slice(0, remaining)
+      return [...selected, ...extras]
+    }
+  }
+
+  return selected
+}
+
 // ── SCULPTING PHASE ────────────────────────────────────────────────────────
 
 async function sculptAppearance(preset: CharacterPreset): Promise<AppearanceConfig> {
   console.log(chalk.bold('  👁  Appearance\n'))
 
-  const { hairColor } = await inquirer.prompt([{
-    type: 'list',
-    name: 'hairColor',
-    message: 'Hair color:',
-    choices: [
-      ...HAIR_COLORS.map(c => ({ name: c, value: c.toLowerCase() })),
-      { name: `Keep preset: ${preset.defaultAppearance.hairColor}`, value: preset.defaultAppearance.hairColor },
-    ],
-    default: preset.defaultAppearance.hairColor,
-  }])
+  const hairColor = await selectOrType('Hair color:', HAIR_COLORS, preset.defaultAppearance.hairColor)
+  const eyeColor  = await selectOrType('Eye color:',  EYE_COLORS,  preset.defaultAppearance.eyeColor)
+  const skinTone  = await selectOrType('Skin tone:',  SKIN_TONES,  preset.defaultAppearance.skinTone)
+  const bodyType  = await selectOrType('Body type:',  BODY_TYPES,  preset.defaultAppearance.bodyType)
 
-  const { eyeColor } = await inquirer.prompt([{
-    type: 'list',
-    name: 'eyeColor',
-    message: 'Eye color:',
-    choices: [
-      ...EYE_COLORS.map(c => ({ name: c, value: c.toLowerCase() })),
-      { name: `Keep preset: ${preset.defaultAppearance.eyeColor}`, value: preset.defaultAppearance.eyeColor },
-    ],
-    default: preset.defaultAppearance.eyeColor,
-  }])
+  const features = await checkboxPlusCustom(
+    'Signature features',
+    SIGNATURE_FEATURES,
+    preset.defaultAppearance.features,
+    3
+  )
 
-  const { skinTone } = await inquirer.prompt([{
-    type: 'list',
-    name: 'skinTone',
-    message: 'Skin tone:',
-    choices: SKIN_TONES.map(c => ({ name: c, value: c.toLowerCase() })),
-    default: SKIN_TONES.findIndex(s => preset.defaultAppearance.skinTone.includes(s.split('/')[0].trim().toLowerCase())),
-  }])
-
-  const { bodyType } = await inquirer.prompt([{
-    type: 'list',
-    name: 'bodyType',
-    message: 'Body type:',
-    choices: BODY_TYPES.map(c => ({ name: c, value: c.toLowerCase() })),
-  }])
-
-  const { features } = await inquirer.prompt([{
-    type: 'checkbox',
-    name: 'features',
-    message: 'Signature features (pick up to 3):',
-    choices: SIGNATURE_FEATURES.map(f => ({
-      name: f,
-      value: f.toLowerCase(),
-      checked: preset.defaultAppearance.features.some(pf =>
-        f.toLowerCase().includes(pf.split(' ')[0].toLowerCase())
-      ),
-    })),
-    validate: (choices: string[]) =>
-      choices.length <= 3 ? true : 'Pick at most 3 features',
-  }])
-
-  const { fashionStyle } = await inquirer.prompt([{
-    type: 'list',
-    name: 'fashionStyle',
-    message: 'Fashion style:',
-    choices: FASHION_STYLES.map(s => ({ name: s, value: s.split(' — ')[0].toLowerCase() })),
-  }])
+  const fashionStyle = await selectOrType(
+    'Fashion style:',
+    FASHION_STYLES.map(s => s.split(' — ')[0]),
+    preset.defaultAppearance.fashionStyle
+  )
 
   return { hairColor, eyeColor, skinTone, bodyType, features, fashionStyle }
 }
@@ -308,24 +346,12 @@ async function sculptAppearance(preset: CharacterPreset): Promise<AppearanceConf
 async function pickPersonality(preset: CharacterPreset): Promise<string[]> {
   console.log(chalk.bold('\n  💫  Personality\n'))
 
-  const { traits } = await inquirer.prompt([{
-    type: 'checkbox',
-    name: 'traits',
-    message: 'Pick 2–4 core personality traits:',
-    choices: PERSONALITY_TRAITS.map(t => ({
-      name: t,
-      value: t,
-      checked: preset.personalityDefaults.some(d =>
-        t.toLowerCase().includes(d.split(' ')[0].toLowerCase())
-      ),
-    })),
-    validate: (choices: string[]) =>
-      choices.length >= 2 && choices.length <= 4
-        ? true
-        : 'Pick 2 to 4 traits',
-  }])
-
-  return traits
+  return checkboxPlusCustom(
+    'Core personality traits (pick 2–4)',
+    PERSONALITY_TRAITS,
+    preset.personalityDefaults,
+    4
+  )
 }
 
 async function pickBackstory(preset: CharacterPreset): Promise<string> {
