@@ -13,6 +13,12 @@ import { ConversationEngine, ProactiveTrigger } from '@openlove/core'
 import { MusicEngine } from './music.js'
 import { DramaEngine } from './drama.js'
 
+export interface ActivityEvent {
+  type: 'music' | 'drama'
+  music?: { title: string; artist: string; emotion?: string }
+  drama?: { title: string; season: number; episode: number }
+}
+
 export interface SchedulerConfig {
   engine: ConversationEngine
   music: MusicEngine
@@ -23,6 +29,8 @@ export interface SchedulerConfig {
   maxIntervalMinutes?: number
   // Callback to actually send the message via the active bridge(s)
   onProactiveMessage: (trigger: ProactiveTrigger) => Promise<void>
+  // Optional callback for OpenClaw to receive activity updates
+  onActivityUpdate?: (event: ActivityEvent) => void
 }
 
 export class AutonomousScheduler {
@@ -129,6 +137,12 @@ export class AutonomousScheduler {
         timestamp: Date.now(),
       })
 
+      // Notify OpenClaw about the activity
+      this.config.onActivityUpdate?.({
+        type: 'music',
+        music: { title: track.track, artist: track.artist, emotion: track.emotion },
+      })
+
       // 60% chance she shares it with you
       if (Math.random() < 0.6) {
         await this.sendIfAppropriate({
@@ -144,6 +158,12 @@ export class AutonomousScheduler {
   private async watchDrama(): Promise<void> {
     try {
       const episode = await this.config.drama.watchNextEpisode()
+
+      // Notify OpenClaw about the activity
+      this.config.onActivityUpdate?.({
+        type: 'drama',
+        drama: { title: episode.showName, season: episode.season, episode: episode.episode },
+      })
 
       // Log to memory
       await this.config.engine.getMemory().logEpisode({

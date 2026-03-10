@@ -107,8 +107,23 @@ export class DiscordBridge {
 
       await this.sendResponse(msg.channel as TextChannel | DMChannel, response)
     } catch (err) {
-      console.error('[Discord] Error handling message:', err)
-      await msg.reply('give me a sec... 😅')
+      const error = err as Error
+      console.error('[Discord] Error handling message:', error.message)
+      console.error('[Discord] Stack:', error.stack)
+
+      // Classify the error to give a more helpful response
+      const isConfigError = error.message?.includes('API key') ||
+        error.message?.includes('not found') ||
+        error.message?.includes('not initialized') ||
+        error.message?.includes('CHARACTER_NAME') ||
+        error.message?.includes('Missing')
+
+      if (isConfigError) {
+        console.error('[Discord] ⚠️  Configuration error — check your .env file and character setup')
+        await msg.reply('⚠️ Setup issue — check the console for details.')
+      } else {
+        await msg.reply('give me a sec... 😅')
+      }
     } finally {
       this.stopTyping(msg.channelId)
     }

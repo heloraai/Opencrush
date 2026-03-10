@@ -204,6 +204,25 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/openclaw-plugin:
+    dependencies:
+      '@openlove/core':
+        specifier: workspace:*
+        version: link:../core
+      ws:
+        specifier: ^8.18.0
+        version: 8.19.0
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.5.13
+        version: 8.18.1
+      tsup:
+        specifier: ^8.3.0
+        version: 8.5.1(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
 packages:
 
   '@anthropic-ai/sdk@0.32.1':

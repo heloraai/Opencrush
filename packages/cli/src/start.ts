@@ -16,6 +16,9 @@ import { MediaEngine } from '@openlove/media'
 import { AutonomousScheduler, MusicEngine, DramaEngine } from '@openlove/autonomous'
 import { join } from 'path'
 
+// OpenClaw plugin (optional — only boots if OPENCLAW_ENABLED=true)
+let openClawPlugin: { start: () => Promise<void>; stop: () => Promise<void>; onMusicListened: (t: any) => void; onDramaWatched: (s: any) => void; pushProactiveMessage: (trigger: any, response: any) => void } | null = null
+
 const ROOT_DIR = process.cwd()
 
 export async function startOpenlove(): Promise<void> {
@@ -113,9 +116,41 @@ export async function startOpenlove(): Promise<void> {
     }
   }
 
+  // ── Start OpenClaw plugin ────────────────────────────────────────────────
+  if (config.OPENCLAW_ENABLED === 'true') {
+    try {
+      const { OpenClawPlugin } = await import('@openlove/openclaw-plugin')
+      const plugin = new OpenClawPlugin({
+        engine,
+        port: parseInt(config.OPENCLAW_PORT ?? '34821'),
+        host: config.OPENCLAW_HOST ?? '127.0.0.1',
+        authToken: config.OPENCLAW_AUTH_TOKEN,
+      })
+      await plugin.start()
+      openClawPlugin = plugin
+
+      // Register as a "bridge" so proactive messages go to OpenClaw too
+      bridges.push({
+        sendProactiveMessage: async (response) => {
+          // OpenClaw clients receive proactive messages via WebSocket
+          plugin.broadcast({
+            type: 'companion:proactive',
+            payload: response as unknown as Record<string, unknown>,
+            timestamp: Date.now(),
+          })
+        },
+        stop: async () => plugin.stop(),
+      })
+
+      console.log(chalk.green(`  ✓ OpenClaw plugin running on port ${config.OPENCLAW_PORT ?? '34821'}`))
+    } catch (err) {
+      console.log(chalk.yellow(`  ⚠ OpenClaw plugin failed to start: ${(err as Error).message}`))
+    }
+  }
+
   if (bridges.length === 0) {
     console.log(chalk.red('\n  ❌ No messaging platforms configured!'))
-    console.log(chalk.gray('  Add at least one: DISCORD_BOT_TOKEN or TELEGRAM_BOT_TOKEN in .env'))
+    console.log(chalk.gray('  Add at least one: DISCORD_BOT_TOKEN, TELEGRAM_BOT_TOKEN, or OPENCLAW_ENABLED=true'))
     process.exit(1)
   }
 
@@ -139,8 +174,17 @@ export async function startOpenlove(): Promise<void> {
     maxIntervalMinutes: parseInt(config.PROACTIVE_MESSAGE_MAX_INTERVAL ?? '240'),
     onProactiveMessage: async (trigger) => {
       const response = await engine.generateProactiveMessage(trigger)
-      // Send to all active bridges
+      // Send to all active bridges (including OpenClaw if enabled)
       await Promise.allSettled(bridges.map(b => b.sendProactiveMessage(response)))
+    },
+    // Forward activity updates to OpenClaw's activity panel
+    onActivityUpdate: (event) => {
+      if (!openClawPlugin) return
+      if (event.type === 'music' && event.music) {
+        openClawPlugin.onMusicListened(event.music)
+      } else if (event.type === 'drama' && event.drama) {
+        openClawPlugin.onDramaWatched(event.drama)
+      }
     },
   })
 
@@ -203,6 +247,11 @@ function loadConfig(): Record<string, string | undefined> {
     QUIET_HOURS_END: process.env.QUIET_HOURS_END,
     PROACTIVE_MESSAGE_MIN_INTERVAL: process.env.PROACTIVE_MESSAGE_MIN_INTERVAL,
     PROACTIVE_MESSAGE_MAX_INTERVAL: process.env.PROACTIVE_MESSAGE_MAX_INTERVAL,
+    // OpenClaw plugin
+    OPENCLAW_ENABLED: process.env.OPENCLAW_ENABLED,
+    OPENCLAW_PORT: process.env.OPENCLAW_PORT,
+    OPENCLAW_HOST: process.env.OPENCLAW_HOST,
+    OPENCLAW_AUTH_TOKEN: process.env.OPENCLAW_AUTH_TOKEN,
   }
 }
 

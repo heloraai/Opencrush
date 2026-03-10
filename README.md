@@ -223,6 +223,36 @@ WhatsApp integration uses QR code pairing — no special account needed:
 
 ---
 
+## 🔗 OpenClaw Plugin Integration
+
+Openlove works as a **plugin for the [OpenClaw](https://github.com/tuquai/openclaw-friends) desktop app**. When enabled, OpenClaw can display your companion's live activity, receive her messages, and control her behavior — all from the system tray.
+
+### Enable the plugin
+
+Add this to your `.env`:
+
+```env
+OPENCLAW_ENABLED=true
+OPENCLAW_PORT=34821       # default port OpenClaw connects to
+OPENCLAW_AUTH_TOKEN=      # optional security token
+```
+
+### What OpenClaw gets
+
+| Feature | Description |
+|---------|-------------|
+| 🎵 **Now Playing** | See what she's currently listening to in OpenClaw's activity panel |
+| 📺 **Now Watching** | Live show tracker — episode, season, her reaction |
+| 💬 **Live Chat** | Send messages directly from OpenClaw without Discord/Telegram |
+| 📡 **WebSocket Events** | Real-time push events: `companion:message`, `companion:proactive`, `companion:activity`, `companion:mood` |
+| 🔌 **REST API** | `GET /status`, `POST /chat`, `POST /trigger`, `GET /memory` |
+
+### Plugin manifest
+
+Located at `packages/openclaw-plugin/manifest.json`. OpenClaw reads this to discover capabilities and the IPC port.
+
+---
+
 ## 🗺️ Roadmap
 
 - [x] Character blueprint system
@@ -232,6 +262,7 @@ WhatsApp integration uses QR code pairing — no special account needed:
 - [x] Image generation (selfies, consistent appearance)
 - [x] Text-to-speech voice messages
 - [x] Autonomous behavior engine (music, dramas)
+- [x] OpenClaw plugin integration (HTTP + WebSocket bridge)
 - [ ] WhatsApp bridge (in progress)
 - [ ] Web creator UI (character creation without CLI)
 - [ ] Multi-character support

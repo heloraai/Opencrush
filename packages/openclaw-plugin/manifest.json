@@ -1,0 +1,38 @@
+{
+  "id": "openlove",
+  "name": "Openlove",
+  "version": "0.1.0",
+  "description": "AI companion that lives on your computer — watches shows, listens to music, and messages you",
+  "author": "Hollandchirs",
+  "homepage": "https://github.com/Hollandchirs/Openlove",
+  "license": "MIT",
+  "type": "companion",
+  "capabilities": [
+    "chat",
+    "voice",
+    "image",
+    "video",
+    "autonomous",
+    "memory"
+  ],
+  "ipc": {
+    "port": 34821,
+    "host": "127.0.0.1",
+    "protocol": "ws+http"
+  },
+  "events": [
+    "companion:ready",
+    "companion:message",
+    "companion:proactive",
+    "companion:activity",
+    "companion:mood",
+    "companion:status"
+  ],
+  "commands": [
+    "chat",
+    "status",
+    "activity",
+    "memory.search",
+    "scheduler.trigger"
+  ]
+}
