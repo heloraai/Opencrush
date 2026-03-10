@@ -10,7 +10,7 @@
  * The portrait makes it undeniable.
  */
 
-import inquirer from 'inquirer'
+import inquirer, { Separator } from 'inquirer'
 import chalk from 'chalk'
 import ora from 'ora'
 import { writeFileSync, readFileSync, mkdirSync, existsSync, copyFileSync } from 'fs'
@@ -256,7 +256,7 @@ async function selectOrType(
     message,
     choices: [
       ...choices.map(c => ({ name: c, value: c.toLowerCase() })),
-      new (inquirer as any).Separator(),
+      new Separator(),
       { name: '✏️  Type your own...', value: CUSTOM },
     ],
     default: defaultValue ?? choices[0].toLowerCase(),
