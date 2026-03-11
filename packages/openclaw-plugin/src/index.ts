@@ -36,11 +36,20 @@ interface OpenClawPluginApi {
     description: string
     parameters: Record<string, any>
     execute: (_toolCallId: string, params: unknown) => Promise<any>
-  }) => void
+  }, options?: { optional?: boolean }) => void
   registerChannel?: (opts: { plugin: any }) => void
-  registerService?: (service: { name: string; start: () => Promise<void>; stop: () => Promise<void> }) => void
+  registerService?: (service: { id: string; start: () => Promise<void>; stop: () => Promise<void> }) => void
+  registerCommand?: (cmd: {
+    name: string
+    description: string
+    acceptsArgs?: boolean
+    requireAuth?: boolean
+    handler: (ctx: any) => { text: string } | Promise<{ text: string }>
+  }) => void
+  registerGatewayMethod?: (id: string, handler: (opts: { respond: (ok: boolean, data: any) => void }) => void) => void
+  registerHttpRoute?: (config: { path: string; auth: string; match: string; handler: (req: any, res: any) => Promise<boolean> }) => void
   registerCli?: (fn: (opts: { program: any }) => void, meta: { commands: string[] }) => void
-  on: (event: string, handler: (...args: any[]) => Promise<any>) => void
+  on: (event: string, handler: (...args: any[]) => Promise<any>, options?: { priority?: number }) => void
   config?: Record<string, any>
   logger?: {
     info?: (...args: any[]) => void
@@ -92,6 +101,15 @@ const plugin = {
 
     // ── 4. Character Personality Hook ──────────────────────────────────────
     registerCharacterHook(api, config)
+
+    // ── 5. Autonomous Activity Service ─────────────────────────────────────
+    registerActivityService(api, config, log)
+
+    // ── 6. Auto-Reply Commands ─────────────────────────────────────────────
+    registerCommands(api, config)
+
+    // ── 7. Activity Status Tool ────────────────────────────────────────────
+    registerActivityStatusTool(api)
 
     log('Plugin registered ✨')
     log(`Character: ${config.characterName ?? '(default)'}`)
@@ -357,15 +375,186 @@ function registerBrowserTools(api: OpenClawPluginApi, config: Record<string, any
 // ── 4. Character Hook ───────────────────────────────────────────────────────
 
 function registerCharacterHook(api: OpenClawPluginApi, config: Record<string, any>): void {
-  // Use api.on() for hooks — this is the real openclaw hook API
   api.on('before_prompt_build', async (context: any) => {
     const characterPrompt = loadCharacterBlueprint(config)
     if (characterPrompt) {
+      // Inject recent activity context so the LLM knows what character has been doing
+      let activityContext = ''
+      if (activityManagerInstance) {
+        const recent = activityManagerInstance.getRecentActivitySummary()
+        const current = activityManagerInstance.getCurrentActivity()
+        activityContext = `\n\n## What You've Been Doing Recently\n`
+          + `Current: ${describeActivity(current)}\n`
+          + `Earlier: ${recent}`
+      }
+
       context.appendSystemContext = (context.appendSystemContext ?? '') +
-        '\n\n' + characterPrompt
+        '\n\n' + characterPrompt + activityContext
     }
     return context
   })
+}
+
+// ── 5. Autonomous Activity Service ──────────────────────────────────────────
+
+// Shared instance for cross-function access
+let activityManagerInstance: import('@openlove/autonomous').ActivityManager | null = null
+
+function registerActivityService(
+  api: OpenClawPluginApi,
+  config: Record<string, any>,
+  log: (msg: string) => void,
+): void {
+  // Only register if registerService is available (openclaw supports it)
+  if (!api.registerService) return
+
+  api.registerService({
+    id: 'openlove-activity',
+    async start() {
+      try {
+        const { ActivityManager, MusicEngine, DramaEngine, BrowserAgent } = await import('@openlove/autonomous')
+
+        activityManagerInstance = new ActivityManager()
+
+        const music = new MusicEngine({
+          spotifyClientId: config.spotifyClientId ?? process.env.SPOTIFY_CLIENT_ID,
+          spotifyClientSecret: config.spotifyClientSecret ?? process.env.SPOTIFY_CLIENT_SECRET,
+        })
+
+        // Start autonomous activity loop
+        const runLoop = async () => {
+          if (!activityManagerInstance) return
+
+          const activityType = activityManagerInstance.pickNextActivityType()
+          if (!activityType) return
+
+          try {
+            if (activityType === 'music') {
+              const track = await music.listenToSomething()
+              const durationMs = (2 + Math.random() * 3) * 60 * 1000
+              activityManagerInstance.startActivity(
+                { type: 'listening', track: track.track, artist: track.artist, album: track.album },
+                durationMs
+              )
+
+              if (config.browserAutomation !== false) {
+                try {
+                  const browser = new BrowserAgent()
+                  const launched = await browser.launch()
+                  if (launched) await browser.listenToSpotify(`${track.track} ${track.artist}`)
+                } catch { /* browser optional */ }
+              }
+            } else if (activityType === 'youtube' || activityType === 'browse') {
+              const topics = ['cute cat videos', 'music videos', 'cooking', 'travel vlog', 'asmr']
+              const topic = topics[Math.floor(Math.random() * topics.length)]
+              const durationMs = (5 + Math.random() * 10) * 60 * 1000
+              activityManagerInstance.startActivity(
+                { type: 'browsing', title: topic },
+                durationMs
+              )
+
+              if (config.browserAutomation !== false) {
+                try {
+                  const browser = new BrowserAgent()
+                  const launched = await browser.launch()
+                  if (launched) await browser.watchYouTube(topic)
+                } catch { /* browser optional */ }
+              }
+            }
+          } catch (err) {
+            log(`Activity error: ${err}`)
+          }
+
+          // Schedule next activity: 20-60 minutes
+          const nextMs = (20 + Math.random() * 40) * 60 * 1000
+          setTimeout(runLoop, nextMs)
+        }
+
+        // Start after 2-5 min boot delay
+        const bootDelay = (2 + Math.random() * 3) * 60 * 1000
+        setTimeout(runLoop, bootDelay)
+
+        log('Activity service started — autonomous behavior active')
+      } catch (err) {
+        log(`Activity service failed to start: ${err}`)
+      }
+    },
+    async stop() {
+      if (activityManagerInstance) {
+        activityManagerInstance.stopActivity()
+        activityManagerInstance = null
+      }
+      log('Activity service stopped')
+    },
+  })
+}
+
+// ── 6. Auto-Reply Commands ──────────────────────────────────────────────────
+
+function registerCommands(api: OpenClawPluginApi, config: Record<string, any>): void {
+  if (!api.registerCommand) return
+
+  // /status — what the character is currently doing
+  api.registerCommand({
+    name: 'status',
+    description: 'Check what the AI companion is currently doing',
+    acceptsArgs: false,
+    handler: () => {
+      if (!activityManagerInstance) {
+        return { text: 'Just chilling~ nothing special right now.' }
+      }
+      const current = activityManagerInstance.getCurrentActivity()
+      const recent = activityManagerInstance.getRecentActivitySummary(3)
+      return {
+        text: `Right now: ${describeActivity(current)}\nEarlier: ${recent}`,
+      }
+    },
+  })
+
+  // /selfie — quick selfie shortcut
+  api.registerCommand({
+    name: 'selfie',
+    description: 'Ask the companion to take a quick selfie',
+    acceptsArgs: true,
+    handler: () => ({
+      text: 'Sure, let me take a selfie for you! *uses openlove_take_selfie tool*',
+    }),
+  })
+}
+
+// ── 7. Activity Status Tool ─────────────────────────────────────────────────
+
+function registerActivityStatusTool(api: OpenClawPluginApi): void {
+  api.registerTool({
+    name: 'openlove_activity_status',
+    label: 'Activity Status',
+    description: 'Check what you are currently doing — your current activity and recent history. Use when asked "what are you doing?" or "what have you been up to?"',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+    async execute(_toolCallId: string, _params: unknown) {
+      if (!activityManagerInstance) {
+        return toolResult('Currently idle — just chilling and waiting for you.')
+      }
+      const current = activityManagerInstance.getCurrentActivity()
+      const recent = activityManagerInstance.getRecentActivitySummary(5)
+      return toolResult(
+        `Current activity: ${describeActivity(current)}\nRecent history: ${recent}`
+      )
+    },
+  })
+}
+
+function describeActivity(activity: import('@openlove/autonomous').ActivityState): string {
+  switch (activity.type) {
+    case 'listening': return `Listening to "${activity.track}" by ${activity.artist}`
+    case 'watching': return `Watching ${activity.title}${activity.details ? ` (${activity.details})` : ''}`
+    case 'browsing': return `Browsing ${activity.title ?? 'the web'}`
+    case 'idle': return activity.label
+    default: return 'doing something'
+  }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
