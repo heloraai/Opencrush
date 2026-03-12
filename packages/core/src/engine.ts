@@ -188,8 +188,28 @@ function parseResponseActions(raw: string): OutgoingMessage {
   let text = raw
 
   // Extract [SELFIE: ...] tags
-  text = text.replace(/\[SELFIE:\s*([^\]]+)\]/gi, (_, prompt) => {
-    actions.push({ type: 'send_image', prompt: prompt.trim() })
+  // Supports: [SELFIE: description] or [SELFIE: style | description]
+  // Valid styles: casual, mirror, close-up, location
+  text = text.replace(/\[SELFIE:\s*([^\]]+)\]/gi, (_, raw) => {
+    const validStyles = ['casual', 'mirror', 'close-up', 'location']
+    const parts = raw.split('|').map((s: string) => s.trim())
+    let style: string | undefined
+    let prompt: string
+
+    if (parts.length >= 2 && validStyles.includes(parts[0].toLowerCase())) {
+      style = parts[0].toLowerCase()
+      prompt = parts.slice(1).join('|').trim()
+    } else {
+      prompt = raw.trim()
+      // Auto-detect style from description keywords
+      const lower = prompt.toLowerCase()
+      if (lower.includes('mirror')) style = 'mirror'
+      else if (lower.includes('close') || lower.includes('face')) style = 'close-up'
+      else if (lower.includes('outside') || lower.includes('park') || lower.includes('beach') || lower.includes('street') || lower.includes('cafe') || lower.includes('restaurant')) style = 'location'
+      else style = 'casual'
+    }
+
+    actions.push({ type: 'send_image', prompt, style })
     return ''
   })
 
