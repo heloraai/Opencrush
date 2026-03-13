@@ -474,12 +474,14 @@ function extractVideoContext(userMessage: string, llmResponse: string, character
   const combined = `${userMessage} ${llmResponse}`.toLowerCase()
   const locationContext = extractLocationContext(combined)
   const activityContext = extractActivityContext(combined)
+  const outfitContext = extractOutfitContext(combined)
   const timeContext = extractTimeContext(combined)
 
   const parts = [
     `short video clip of ${characterName}`,
-    activityContext || 'waving at camera',
-    locationContext,
+    outfitContext,
+    activityContext || 'smiling naturally at camera',
+    locationContext || 'cozy indoor setting',
     timeContext,
   ].filter(Boolean)
 
@@ -528,6 +530,8 @@ function extractLocationContext(text: string): string {
   if (/bath|shower|洗澡/.test(text)) return 'bathroom mirror, steam'
   if (/sofa|couch|living room|沙发|客厅/.test(text)) return 'on the couch, living room'
   if (/car|drive|开车|车里/.test(text)) return 'in the car'
+  if (/room|my room|房间|屋里/.test(text)) return 'in cozy room, warm ambient lighting'
+  if (/home|apartment|house|家里/.test(text)) return 'at home, cozy interior'
   return ''
 }
 
@@ -555,6 +559,9 @@ function extractActivityContext(text: string): string {
   if (/music|listen|听歌|音乐/.test(text)) return 'wearing earbuds, vibing to music'
   if (/watch|movie|drama|看剧|电影/.test(text)) return 'screen glow on face, watching something'
   if (/computer|laptop|coding|电脑/.test(text)) return 'laptop open nearby'
+  if (/chill|relax|hang|lounging|resting|放松|休息|发呆/.test(text)) return 'relaxing, looking comfortable and at ease'
+  if (/sketch|draw|paint|art|画|写/.test(text)) return 'sketching or drawing, art supplies visible'
+  if (/phone|scroll|刷手机/.test(text)) return 'casually scrolling phone'
   return ''
 }
 
