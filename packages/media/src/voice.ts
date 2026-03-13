@@ -243,11 +243,34 @@ export class VoiceEngine {
 
 function sanitizeForSpeech(text: string): string {
   return text
+    // Remove action tags
     .replace(/\[SELFIE:[^\]]*\]/gi, '')
     .replace(/\[VOICE:[^\]]*\]/gi, '')
     .replace(/\[VIDEO:[^\]]*\]/gi, '')
-    .replace(/[*_`~#]/g, '')  // remove markdown
-    .replace(/https?:\/\/\S+/g, '')  // remove URLs
+    // Remove stage directions: *soft singing*, (laughs), [giggles]
+    .replace(/\*[^*]+\*/g, '')        // *action descriptions*
+    .replace(/\([^)]+\)/g, '')        // (action descriptions)
+    .replace(/\[[^\]]*\]/g, '')       // [any remaining brackets]
+    // Remove ALL emojis (Unicode emoji ranges)
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')   // emoticons
+    .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')   // misc symbols
+    .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')   // transport
+    .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')   // flags
+    .replace(/[\u{2600}-\u{26FF}]/gu, '')      // misc symbols
+    .replace(/[\u{2700}-\u{27BF}]/gu, '')      // dingbats
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')      // variation selectors
+    .replace(/[\u{1F900}-\u{1F9FF}]/gu, '')    // supplemental symbols
+    .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '')    // chess symbols
+    .replace(/[\u{1FA70}-\u{1FAFF}]/gu, '')    // symbols extended
+    .replace(/[\u{200D}]/gu, '')               // zero-width joiner
+    .replace(/[\u{20E3}]/gu, '')               // combining enclosing keycap
+    .replace(/[\u{E0020}-\u{E007F}]/gu, '')    // tags
+    // Remove markdown formatting
+    .replace(/[*_`~#]/g, '')
+    // Remove URLs
+    .replace(/https?:\/\/\S+/g, '')
+    // Clean up extra whitespace from removals
+    .replace(/\s{2,}/g, ' ')
     .trim()
 }
 

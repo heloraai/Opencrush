@@ -215,18 +215,27 @@ export class ConversationEngine {
         break
       case 'random_thought': {
         const recentActivity = trigger.data?.recentActivity
+        // Pick a random style to avoid template-feeling messages
+        const styles = [
+          'share a specific, concrete detail from what you just experienced (a funny moment, a pretty thing you saw, a taste, a sound)',
+          'ask the user a genuine question about their day or something personal — not generic "how are you"',
+          'send a reaction to something you just saw/read/heard — be specific, not vague',
+          'share a mini-story or observation from your day in 1-2 sentences',
+          'text like you just remembered something about the user and wanted to bring it up',
+        ]
+        const style = styles[Math.floor(Math.random() * styles.length)]
+
         if (recentActivity) {
-          prompt = `You've been ${recentActivity} recently. ` +
-            `Something about it made you think of the user — maybe it reminded you of a past conversation, ` +
-            `or you want to share what you found interesting. ` +
-            `Send a SHORT, natural text message that connects what you were just doing to your relationship with the user. ` +
-            `Don't explain that you were doing the activity — just share the thought it triggered. ` +
-            `Keep it to 1-2 sentences max, like a real text.`
+          prompt = `You've been ${recentActivity}. ` +
+            `Text the user something natural and specific. Style: ${style}. ` +
+            `IMPORTANT: Do NOT start with generic greetings like "hey" or "what's up". ` +
+            `Jump straight into the thought. 1-2 sentences max, like a real text. ` +
+            `Be specific and concrete, never vague or philosophical.`
         } else {
-          prompt = `You want to check in with the user. ` +
-            `Send a natural, brief message — maybe ask what they're up to, share something small from your day, ` +
-            `or reference something you talked about before. ` +
-            `Keep it to 1-2 sentences, like a real text message. Don't be dramatic or philosophical.`
+          prompt = `Text the user something casual and specific. Style: ${style}. ` +
+            `IMPORTANT: Do NOT start with "hey" or ask "how are you". ` +
+            `Jump straight into something concrete — a thought, a question, an observation. ` +
+            `1-2 sentences max, like texting a close friend.`
         }
         break
       }
@@ -437,16 +446,24 @@ function detectPretendMedia(
     return null
   }
 
-  // --- Determine media TYPE from both user message and LLM response ---
-  // Priority: LLM response type > user message type > default image
+  // --- Determine media TYPE ---
+  // Priority: USER explicit type > LLM type > default image
+  // User intent overrides LLM — DeepSeek often says "here's a video" when user asked for a photo
 
-  // Video signals (from either side)
-  if (llmSendsVideo || /video|clip|film|视频|录像/.test(userLower)) return { type: 'video' }
+  const userWantsVideo = /video|clip|film|视频|录像/.test(userLower)
+  const userWantsVoice = /voice|hear|listen|speak|sing|声音|语音|唱/.test(userLower)
+  const userWantsImage = /photo|pic|image|selfie|view|风景|窗|照|图|see/.test(userLower)
 
-  // Voice signals (from either side)
-  if (llmSendsVoice || /voice|hear|listen|speak|sing|声音|语音|唱/.test(userLower)) return { type: 'voice' }
+  // If user explicitly asked for a specific type, respect that
+  if (userWantsVideo && !userWantsImage) return { type: 'video' }
+  if (userWantsVoice) return { type: 'voice' }
+  if (userWantsImage && !userWantsVideo) return { type: 'image' }
 
-  // Image is the default
+  // No clear user type — fall back to LLM signals
+  if (llmSendsVideo) return { type: 'video' }
+  if (llmSendsVoice) return { type: 'voice' }
+
+  // Default to image
   return { type: 'image' }
 }
 

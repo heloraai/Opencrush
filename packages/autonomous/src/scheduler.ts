@@ -374,7 +374,7 @@ export class AutonomousScheduler {
   }
 
   private async maybeRandomThought(): Promise<void> {
-    if (Math.random() > 0.2) return
+    if (Math.random() > 0.1) return  // 10% chance (was 20%)
 
     // Inject recent activity context so the LLM knows what she's been doing
     const recentActivity = this.config.activityManager.getRecentActivitySummary()
