@@ -247,24 +247,21 @@ function sanitizeForSpeech(text: string): string {
     .replace(/\[SELFIE:[^\]]*\]/gi, '')
     .replace(/\[VOICE:[^\]]*\]/gi, '')
     .replace(/\[VIDEO:[^\]]*\]/gi, '')
-    // Remove stage directions: *soft singing*, (laughs), [giggles]
+    // Remove stage directions: *soft singing*, (laughs), [giggles], ~hums~
     .replace(/\*[^*]+\*/g, '')        // *action descriptions*
     .replace(/\([^)]+\)/g, '')        // (action descriptions)
     .replace(/\[[^\]]*\]/g, '')       // [any remaining brackets]
-    // Remove ALL emojis (Unicode emoji ranges)
-    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')   // emoticons
-    .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')   // misc symbols
-    .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')   // transport
-    .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')   // flags
-    .replace(/[\u{2600}-\u{26FF}]/gu, '')      // misc symbols
-    .replace(/[\u{2700}-\u{27BF}]/gu, '')      // dingbats
-    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')      // variation selectors
-    .replace(/[\u{1F900}-\u{1F9FF}]/gu, '')    // supplemental symbols
-    .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '')    // chess symbols
-    .replace(/[\u{1FA70}-\u{1FAFF}]/gu, '')    // symbols extended
-    .replace(/[\u{200D}]/gu, '')               // zero-width joiner
-    .replace(/[\u{20E3}]/gu, '')               // combining enclosing keycap
-    .replace(/[\u{E0020}-\u{E007F}]/gu, '')    // tags
+    .replace(/~[^~]+~/g, '')          // ~action descriptions~
+    // Remove ALL emojis — comprehensive Unicode property match
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    // Remove remaining emoji-related codepoints (joiners, selectors, modifiers)
+    .replace(/[\u{200D}\u{FE0E}\u{FE0F}\u{20E3}]/gu, '')  // ZWJ, variation selectors
+    .replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '')                 // skin tone modifiers
+    .replace(/[\u{E0020}-\u{E007F}]/gu, '')                  // tag characters
+    // Remove common text emoticons that TTS reads literally
+    .replace(/[:;][-']?[)(DPpOo3><\\/|]/g, '')
+    .replace(/[<>]3/g, '')            // <3 heart
+    .replace(/xD+/gi, '')             // xD
     // Remove markdown formatting
     .replace(/[*_`~#]/g, '')
     // Remove URLs

@@ -374,14 +374,25 @@ export class AutonomousScheduler {
   }
 
   private async maybeRandomThought(): Promise<void> {
-    if (Math.random() > 0.1) return  // 10% chance (was 20%)
+    if (Math.random() > 0.05) return  // 5% chance — roughly once per 1-2 days
 
-    // Inject recent activity context so the LLM knows what she's been doing
+    // Inject recent activity + conversation context so thoughts feel connected
     const recentActivity = this.config.activityManager.getRecentActivitySummary()
+
+    // Pull recent conversation topics from memory for contextual thoughts
+    let recentTopics = ''
+    try {
+      const memCtx = await this.config.engine.getMemory().getContext('')
+      const lastMsgs = memCtx.recentMessages.slice(-6)
+      const userMsgs = lastMsgs.filter(m => m.role === 'user').map(m => m.content)
+      if (userMsgs.length > 0) {
+        recentTopics = userMsgs.slice(-3).join('; ')
+      }
+    } catch { /* ignore */ }
 
     await this.sendIfAppropriate({
       type: 'random_thought',
-      data: { recentActivity },
+      data: { recentActivity, recentTopics },
     })
   }
 

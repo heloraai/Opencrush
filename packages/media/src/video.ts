@@ -80,12 +80,12 @@ export class VideoEngine {
     debugLog(`[Media/Video] Step 1: PuLID still frame...`)
     const stillResult = await fal.subscribe('fal-ai/flux-pulid', {
       input: {
-        prompt: `${prompt}, cinematic still frame, high quality, natural lighting`,
+        prompt: `${prompt}, cinematic still frame, volumetric lighting, shallow depth of field, warm color grading, film grain, ultra detailed`,
         reference_image_url: base64Image,
         image_size: 'portrait_4_3',
-        guidance_scale: 5,
-        num_inference_steps: 24,
-        id_weight: 0.8,
+        guidance_scale: 5.5,
+        num_inference_steps: 28,   // more steps → finer details
+        id_weight: 0.7,           // balanced: character consistency + natural expression
       },
     }) as any
 
@@ -114,7 +114,7 @@ export class VideoEngine {
 
       const result = await fal.subscribe('fal-ai/wan-i2v', {
         input: {
-          prompt: `${prompt}, cinematic, high quality, natural lighting, smooth motion`,
+          prompt: `${prompt}, subtle natural movement, gentle breathing, slight smile, hair sway, cinematic, volumetric lighting, smooth motion`,
           image_url: imageUrl,
           num_frames: 81,
           resolution: '480p',

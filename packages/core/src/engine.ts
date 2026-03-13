@@ -215,24 +215,30 @@ export class ConversationEngine {
         break
       case 'random_thought': {
         const recentActivity = trigger.data?.recentActivity
+        const recentTopics = trigger.data?.recentTopics
         // Pick a random style to avoid template-feeling messages
         const styles = [
           'share a specific, concrete detail from what you just experienced (a funny moment, a pretty thing you saw, a taste, a sound)',
-          'ask the user a genuine question about their day or something personal — not generic "how are you"',
+          'ask the user a genuine question related to something they recently told you',
           'send a reaction to something you just saw/read/heard — be specific, not vague',
           'share a mini-story or observation from your day in 1-2 sentences',
           'text like you just remembered something about the user and wanted to bring it up',
+          'follow up on something from your last conversation — reference it naturally',
         ]
         const style = styles[Math.floor(Math.random() * styles.length)]
 
+        const topicHint = recentTopics
+          ? ` You recently talked about: "${recentTopics}". You can reference or follow up on this naturally.`
+          : ''
+
         if (recentActivity) {
-          prompt = `You've been ${recentActivity}. ` +
+          prompt = `You've been ${recentActivity}.${topicHint} ` +
             `Text the user something natural and specific. Style: ${style}. ` +
             `IMPORTANT: Do NOT start with generic greetings like "hey" or "what's up". ` +
             `Jump straight into the thought. 1-2 sentences max, like a real text. ` +
             `Be specific and concrete, never vague or philosophical.`
         } else {
-          prompt = `Text the user something casual and specific. Style: ${style}. ` +
+          prompt = `${topicHint ? topicHint.trim() + ' ' : ''}Text the user something casual and specific. Style: ${style}. ` +
             `IMPORTANT: Do NOT start with "hey" or ask "how are you". ` +
             `Jump straight into something concrete — a thought, a question, an observation. ` +
             `1-2 sentences max, like texting a close friend.`

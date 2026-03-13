@@ -146,18 +146,18 @@ export class ImageEngine {
       // Scene photo — no selfie prefix, no face description, just the scene
       return [
         request.prompt,
-        'shot on iPhone 15 Pro, raw unedited photo',
-        'realistic natural lighting, authentic smartphone photo',
-        'no AI artifacts, not illustrated, not rendered, high quality',
+        'shot on iPhone 15 Pro, 48MP detail',
+        'cinematic natural lighting, warm color grading, shallow depth of field',
+        'bokeh highlights, film grain, authentic photo, ultra high quality',
       ].filter(Boolean).join(', ')
     }
 
     // Selfie/portrait photos — include face and style prefix
     const stylePrefix: Record<NonNullable<SelfieRequest['style']>, string> = {
-      casual: 'casual selfie shot on iPhone, natural lighting, front-facing camera, authentic candid photo, slightly off-center framing',
-      mirror: 'full body mirror selfie shot on iPhone, outfit visible, natural indoor lighting, vertical framing, raw photo',
-      'close-up': 'close-up selfie portrait shot on iPhone, shallow depth of field, warm golden hour lighting, front camera distortion, raw photo',
-      location: 'selfie at a scenic location shot on iPhone, environment visible in background, candid travel photo, natural lighting',
+      casual: 'intimate candid selfie, soft natural window light, slight head tilt, warm genuine smile, bokeh background, shot on iPhone 15 Pro',
+      mirror: 'full body mirror selfie, outfit clearly visible, natural indoor lighting, authentic vertical framing, shot on iPhone 15 Pro',
+      'close-up': 'close-up portrait, shallow depth of field, golden hour warm glow on skin, catch light in eyes, shot on iPhone 15 Pro',
+      location: 'selfie at scenic location, environment visible in background, natural backlight, travel photo vibes, shot on iPhone 15 Pro',
     }
 
     const prefix = stylePrefix[request.style ?? 'casual']
@@ -168,10 +168,9 @@ export class ImageEngine {
       prefix,
       appearance,
       mainPrompt,
-      // Photorealism anchors — critical for avoiding AI look
-      'shot on iPhone 15 Pro, raw unedited photo, natural skin texture with pores and imperfections',
-      'no makeup filter, no beauty mode, realistic lighting, slight lens distortion',
-      'no AI artifacts, not illustrated, not rendered, authentic smartphone photo',
+      'natural skin texture, visible pores, subtle imperfections',
+      'cinematic color grading, film grain, slight lens flare',
+      'raw unedited photo, not illustrated, not rendered',
     ].filter(Boolean).join(', ')
   }
 
@@ -245,9 +244,9 @@ export class ImageEngine {
         prompt,
         reference_image_url: referenceImageUrl,
         image_size: imageSize,
-        guidance_scale: 4,
-        num_inference_steps: 20,
-        id_weight: 0.5,  // lower = better looking, more prompt-following; higher = more face-locked
+        guidance_scale: 5,           // slightly higher → sharper details, better prompt adherence
+        num_inference_steps: 28,     // more steps → finer details, smoother skin
+        id_weight: 0.45,            // slightly lower → more natural expression, less "frozen face"
       }, this.config.falKey!)
 
       debugLog(`[Media/Image] PuLID result keys: ${JSON.stringify(Object.keys(result))}`)
