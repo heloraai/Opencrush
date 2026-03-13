@@ -18,6 +18,7 @@ import { MediaEngine } from '@openlove/media'
 import { AutonomousScheduler, MusicEngine, DramaEngine, ActivityManager, BrowserAgent } from '@openlove/autonomous'
 import { join } from 'path'
 import { writeFileSync, readFileSync, unlinkSync, existsSync } from 'fs'
+import { execSync } from 'child_process'
 
 const ROOT_DIR = process.env.INIT_CWD ?? process.cwd()
 // Use /tmp for PID file so it's always the same path regardless of cwd
@@ -28,55 +29,63 @@ const PID_FILE = '/tmp/openlove.pid'
  * Returns true if a process was killed.
  */
 export function killExistingProcess(): boolean {
-  if (!existsSync(PID_FILE)) return false
+  let killed = false
+  const myPid = process.pid
 
-  try {
-    const pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim(), 10)
-    if (isNaN(pid)) {
-      unlinkSync(PID_FILE)
-      return false
-    }
-
-    // Check if process is alive
+  // Strategy 1: PID file
+  if (existsSync(PID_FILE)) {
     try {
-      process.kill(pid, 0) // signal 0 = just check existence
-    } catch {
-      // Process doesn't exist — stale PID file
-      unlinkSync(PID_FILE)
-      return false
-    }
+      const pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim(), 10)
+      if (!isNaN(pid) && pid !== myPid) {
+        try {
+          process.kill(pid, 0)
+          console.log(chalk.yellow(`  Stopping existing process (PID ${pid})...`))
+          process.kill(pid, 'SIGTERM')
+          killed = true
+        } catch { /* process doesn't exist */ }
+      }
+      try { unlinkSync(PID_FILE) } catch { /* ignore */ }
+    } catch { /* ignore */ }
+  }
 
-    console.log(chalk.yellow(`  Stopping existing process (PID ${pid})...`))
-    process.kill(pid, 'SIGTERM')
-
-    // Brief sync wait for process to exit
-    const deadline = Date.now() + 5000
-    while (Date.now() < deadline) {
-      try {
-        process.kill(pid, 0)
-        // Still alive, wait a bit
-        const waitUntil = Date.now() + 100
-        while (Date.now() < waitUntil) { /* spin */ }
-      } catch {
-        // Process exited
-        break
+  // Strategy 2: Kill ALL other openlove processes by pattern (covers pnpm spawns)
+  // This is critical because pnpm creates parent processes not tracked by PID file
+  try {
+    const result = execSync(
+      `ps aux | grep "[c]li/dist/index.js" | grep -v "${myPid}" | awk '{print $2}'`,
+      { encoding: 'utf-8', timeout: 5000 }
+    ).trim()
+    if (result) {
+      const pids = result.split('\n').filter(Boolean)
+      for (const pidStr of pids) {
+        const pid = parseInt(pidStr, 10)
+        if (!isNaN(pid) && pid !== myPid) {
+          try {
+            process.kill(pid, 'SIGTERM')
+            console.log(chalk.yellow(`  Killed stale openlove process (PID ${pid})`))
+            killed = true
+          } catch { /* already dead */ }
+        }
       }
     }
+  } catch { /* grep found nothing — no existing processes */ }
 
-    // Force kill if still alive
-    try {
-      process.kill(pid, 0)
-      console.log(chalk.yellow(`  Process still alive, sending SIGKILL...`))
-      process.kill(pid, 'SIGKILL')
-    } catch { /* already dead */ }
+  // Also kill parent pnpm processes running @openlove/cli
+  try {
+    execSync(
+      `pkill -f "@openlove/cli run start" 2>/dev/null || true`,
+      { timeout: 3000 }
+    )
+  } catch { /* ignore */ }
 
-    try { unlinkSync(PID_FILE) } catch { /* ignore */ }
-    console.log(chalk.green(`  Previous process stopped.`))
-    return true
-  } catch {
-    try { unlinkSync(PID_FILE) } catch { /* ignore */ }
-    return false
+  if (killed) {
+    // Wait for processes to fully exit
+    const waitUntil = Date.now() + 2000
+    while (Date.now() < waitUntil) { /* spin */ }
+    console.log(chalk.green(`  Previous process(es) stopped.`))
   }
+
+  return killed
 }
 
 function writePidFile(): void {
