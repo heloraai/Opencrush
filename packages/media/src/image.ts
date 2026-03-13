@@ -139,6 +139,20 @@ export class ImageEngine {
   }
 
   private buildImagePrompt(request: SelfieRequest): string {
+    // Scene photos (no referenceImagePath) get a different prompt style
+    const isScenePhoto = !request.referenceImagePath && request.style === 'location'
+
+    if (isScenePhoto) {
+      // Scene photo — no selfie prefix, no face description, just the scene
+      return [
+        request.prompt,
+        'shot on iPhone 15 Pro, raw unedited photo',
+        'realistic natural lighting, authentic smartphone photo',
+        'no AI artifacts, not illustrated, not rendered, high quality',
+      ].filter(Boolean).join(', ')
+    }
+
+    // Selfie/portrait photos — include face and style prefix
     const stylePrefix: Record<NonNullable<SelfieRequest['style']>, string> = {
       casual: 'casual selfie shot on iPhone, natural lighting, front-facing camera, authentic candid photo, slightly off-center framing',
       mirror: 'full body mirror selfie shot on iPhone, outfit visible, natural indoor lighting, vertical framing, raw photo',
@@ -168,6 +182,10 @@ export class ImageEngine {
    * NEVER returns square — real phone photos are always portrait.
    */
   private getImageSizePreset(request: SelfieRequest): FalImageSize {
+    // Scene photos (no reference) should use landscape ratio
+    const isScenePhoto = !request.referenceImagePath && request.style === 'location'
+    if (isScenePhoto) return 'landscape_16_9'
+
     const ratio = request.aspectRatio ?? this.defaultRatioForStyle(request.style)
     switch (ratio) {
       case '9:16': return 'portrait_16_9'

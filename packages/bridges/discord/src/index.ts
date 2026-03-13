@@ -509,10 +509,14 @@ export class DiscordBridge {
 
         try {
         if (action.type === 'send_image') {
-          debugLog(`[Discord] Generating image: prompt="${action.prompt}", style="${action.style}", refPath="${this.config.engine.characterBlueprint.referenceImagePath}"`)
+          // Scene photos (style='location' with non-selfie prompt) should NOT use reference image
+          // Reference image forces PuLID face consistency → always produces face photos
+          const isScenePhoto = action.style === 'location' && !/selfie|self-portrait/i.test(action.prompt)
+          const refPath = isScenePhoto ? undefined : this.config.engine.characterBlueprint.referenceImagePath
+          debugLog(`[Discord] Generating image: prompt="${action.prompt}", style="${action.style}", scene=${isScenePhoto}, refPath="${refPath ?? 'none'}"`)
           const imageBuffer = await this.config.media.generateImage(
             action.prompt,
-            this.config.engine.characterBlueprint.referenceImagePath,
+            refPath,
             action.style
           )
           if (imageBuffer) {
