@@ -378,51 +378,68 @@ function isSelfieRequest(content: string): boolean {
 /**
  * Detect when LLM is "pretending" to send media without using tags.
  * DeepSeek often outputs "here you go" + blank lines where a [SELFIE:] tag should be.
- * Returns the likely media type, or null if no pretend-send detected.
  *
- * IMPORTANT: The USER message must also contain a media request intent.
- * If the user is just chatting ("photo is ok babe") and the LLM spontaneously
- * "sends" a photo, we should NOT inject media — the LLM is just roleplaying.
+ * Strategy:
+ * 1. Check if LLM response has "sending" language + suspicious blank gaps
+ * 2. Infer media type from BOTH user message AND LLM response content
+ *    - LLM says "here's a clip/video" → video
+ *    - LLM says "listen to this" / user asked for voice → voice
+ *    - LLM says "here's a photo" / user asked for photo → image
+ * 3. Require either user request intent OR strong LLM sending intent
+ *    to prevent false positives on casual chat ("photo is ok babe")
  */
 function detectPretendMedia(
   userMessage: string,
   llmResponse: string
 ): { type: 'image' | 'voice' | 'video' } | null {
-  const lower = llmResponse.toLowerCase()
+  const llmLower = llmResponse.toLowerCase()
+  const userLower = userMessage.toLowerCase()
 
   // LLM is pretending to send something if it uses "here" phrases with blank line gaps
   const pretendPatterns = [
     /here you go/i, /here it is/i, /here's (the|a|my)/i,
     /there you go/i, /sending it/i, /let me send/i,
     /sent it/i, /attached/i, /took a (quick|little)/i,
-    /给你/i, /发给你/i, /这是/i, /拍了/i,
+    /给你/i, /发给你/i, /这是/i, /拍了/i, /录了/i,
   ]
-  const isPretending = pretendPatterns.some(p => p.test(lower))
+  const isPretending = pretendPatterns.some(p => p.test(llmLower))
   if (!isPretending) return null
 
   // Has suspicious blank line gaps (where a tag should have been)
   const hasGaps = /\n\s*\n\s*\n/.test(llmResponse)
   if (!hasGaps) return null
 
-  // CRITICAL: User message must also contain a media request intent.
-  // Without this, casual comments like "photo is ok babe" trigger false positives.
-  const userLower = userMessage.toLowerCase()
-  const userWantsMedia = /send|show|see|take|give|wanna|want|can (i|you)|let me|拍|发|看|给|要/.test(userLower)
-    && /photo|pic|image|selfie|video|clip|voice|audio|hear|照|图|拍|视频|语音|声音/.test(userLower)
+  // --- Determine intent source: user request OR LLM sending intent ---
 
-  // Also allow if user is asking "where is" (follow-up to failed media)
+  // User explicitly requested media?
+  const userWantsMedia = /send|show|see|take|give|wanna|want|can (i|you)|let me|拍|发|看|给|要/.test(userLower)
+    && /photo|pic|image|selfie|video|clip|voice|audio|hear|照|图|拍|视频|语音|声音|sing|歌/.test(userLower)
+
+  // User following up on missing media?
   const userFollowUp = /where.*(photo|pic|image|video|clip|selfie|it)|没(有)?发|没收到|怎么没|didn't (send|attach|go)/i.test(userLower)
 
-  if (!userWantsMedia && !userFollowUp) {
-    debugLog(`[Engine] Pretend-send suppressed: user message "${userMessage.slice(0, 60)}" has no media request intent`)
+  // LLM is strongly indicating it's sending specific media type?
+  const llmSendsVideo = /here's.*(clip|video|recording)|quick (clip|video)|录.*(了|好)/i.test(llmLower)
+  const llmSendsVoice = /here's.*(voice|audio|recording)|listen to (this|me)|hear (this|me)|说给你听|唱给你/i.test(llmLower)
+  const llmSendsImage = /here's.*(photo|pic|selfie|shot|view)|took.*(photo|pic|shot)|拍了.*照/i.test(llmLower)
+
+  const hasIntent = userWantsMedia || userFollowUp || llmSendsVideo || llmSendsVoice || llmSendsImage
+
+  if (!hasIntent) {
+    debugLog(`[Engine] Pretend-send suppressed: no media intent in user="${userMessage.slice(0, 50)}" or LLM response`)
     return null
   }
 
-  // Determine type from user message context
-  if (/video|clip|film|视频|录/.test(userLower)) return { type: 'video' }
-  if (/voice|hear|listen|speak|sing|声音|语音/.test(userLower)) return { type: 'voice' }
+  // --- Determine media TYPE from both user message and LLM response ---
+  // Priority: LLM response type > user message type > default image
 
-  // Default to image (most common pretend-send)
+  // Video signals (from either side)
+  if (llmSendsVideo || /video|clip|film|视频|录像/.test(userLower)) return { type: 'video' }
+
+  // Voice signals (from either side)
+  if (llmSendsVoice || /voice|hear|listen|speak|sing|声音|语音|唱/.test(userLower)) return { type: 'voice' }
+
+  // Image is the default
   return { type: 'image' }
 }
 
